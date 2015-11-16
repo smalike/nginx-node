@@ -4,8 +4,9 @@
   "description": "linux node test",
   "main": "app.js",
   "dependencies": {
+    "art-template": "^3.0.3",
     "express": "^4.13.3",
-    "art-template": "^3.0.3"
+    "uglify-js": "^2.6.1"
   },
   "devDependencies": {},
   "scripts": {
