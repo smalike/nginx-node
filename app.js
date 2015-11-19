@@ -6,7 +6,7 @@ var uglify = require("uglify-js");
 var MIME = require("./mime");
 var config = require("./config");
 //var template = require("art-template/node/template-native.js");
-var md5 = require("MD5");
+var md5 = require("md5");
 var port = process.env.PORT || 8000;
 var app = express();
 
