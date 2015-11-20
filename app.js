@@ -23,6 +23,7 @@ app.get("/", function (req, res) {
 });
 
 app.get("/combine/*", function (req, res) {
+    console.time("combine");
     console.log("run get /combine. request path: ", req.params["0"]);
     
     var url = req.params["0"],
@@ -34,76 +35,84 @@ app.get("/combine/*", function (req, res) {
     }
     
     config.cache_path = path.resolve(config.base, config.cache_path);
+    console.log("config.cache_path: " + config.cache_path);
     
-    if (config.cache) {
-        result = cacheCheck(url);
-        if (result) {
-            console.log("cache done.");
-            res.set("Content-Type", MIME.types["js"]);
-            res.send(result);
+    if (!config.cache) {
+        concatFile(url, res);
+        return false;
+    }
+    cacheCheck(url, function (result) {
+        if (!result) {
+            concatFile(url, res);
             return false;
         }
-    }
-    
+        console.log("cache done.");
+
+        res.set("Content-Type", MIME.types["js"]);
+        res.send(result);
+
+        console.timeEnd("combine");
+    });
+});
+
+function concatFile(url, res) {
     loopFiles(url, {
         done: function (data) {
             console.log("done.");
+            
             res.set("Content-Type", MIME.types["js"]);
             res.send(data);
-            cacheWrite(url, data);
+            if (config.cache) {
+                cacheWrite(url, data);
+            }
+            
+            console.timeEnd("combine");
         }
     });
-    
-});
+}
 
 function mkdir(dirpath, mode) {
     var pathTemp;
     mode = mode || "0777"
     if (fs.existsSync(dirpath)) {
-        return false;
+        console.log(dirpath + " exists.");
+        return true;
     }
-    dirpath.split(path.sep).forEach(function (dirname) {
-        if (pathTemp) {
-            pathTemp = path.join(pathTemp, dirname);
-        } else {
-            pathTemp = dirname;
+    if (mkdir(path.dirname(dirpath), mode)) {
+        fs.mkdirSync(dirpath, mode);
+        console.log(dirpath + " mkdir.");
+        return true;
+    }
+}
+
+function cacheCheck(url, callback) {
+    var filePath = path.resolve(config.cache_path, md5(url) + ".json"), data;
+    fs.exists(filePath, function (exists) {
+        if (!exists) {
+            return callback(false);
         }
-        if (!fs.existsSync(pathTemp)) {
-            if (!fs.mkdirSync(pathTemp)) {
-                chmod(pathTemp, mode);
-                return false;
+        fs.readFile(filePath, "utf-8", function (err, buffer) {
+            if (err) {
+                console.log("read cache err.");
+                return callback(false);
             }
-        }
+            data = buffer.toString();
+            if (!data) {
+                return callback(false);
+            }
+            data = JSON.parse(data);
+            if (new Date().getTime() > data.updateTime + config.cache_expiration_time) {
+                fs.unlinkSync(filePath);
+                return callback(false);
+            }
+            return callback(data.data);
+        });
     });
-    return true;
-}
-
-function chmod(dirpath, mode) {
-    return fs.chmodSync(dirpath, mode);
-}
-
-function cacheCheck(url) {
-    var filePath = path.resolve(config.cache_path, md5(url) + ".json"),
-        isFile = fs.existsSync(filePath),
-        data;
-    if (!isFile) {
-        return false;
-    }
-    data = fs.readFileSync(filePath).toString();
-    if (!data) {
-        return false;
-    }
-    data = JSON.parse(data);
-    if (new Date().getTime() > data.updateTime + config.cache_expiration_time) {
-        fs.unlinkSync(filePath);
-        return false;
-    }
-    return data.data;
 }
 
 function cacheWrite(url, data) {
     mkdir(config.cache_path);
-    fs.writeFileSync(path.resolve(config.cache_path, md5(url) + ".json"), JSON.stringify({
+    fs.writeFile(path.resolve(config.cache_path, md5(url) + ".json"), JSON.stringify({
         url: url,
         data: data,
         updateTime: new Date().getTime()
@@ -118,33 +127,7 @@ function loopFiles(url, emit) {
     for (i = 0; i < urls.length; i++) {
         filename = urls[i];
         readFile(filename, i, emit);
-//        readFileSync(filename, i, emit);
     }
-}
-
-function readFileSync(filename, i, emit) {
-    var filePath,
-        ext = "", logTime;
-    
-    console.time("readFile");
-    
-    if (!filename) {
-        return false;
-    }
-    filePath = path.resolve(config.base, filename);
-    ext = path.extname(filePath);
-    if (!ext) {
-        filePath += ".js";
-    }
-    if (fs.existsSync(filePath)) {
-        emit.indexs[i] = min(fs.readFileSync(filePath).toString());
-    }
-    
-    if (!--emit.len) {
-        emit.done(emit.indexs.join(""));
-    }
-    
-    console.timeEnd("readFile");
 }
 
 function readFile(filename, i, emit) {
@@ -161,29 +144,35 @@ function readFile(filename, i, emit) {
     if (!ext) {
         filePath += ".js";
     }
-    if (fs.existsSync(filePath)) {
-        (function (filePath, i) {
+    (function (filePath, i) {
+        fs.exists(filePath, function (exists) {
+            if (exists) {
+                console.log(emit.len);
+                if (!--emit.len) {
+                    emit.done(emit.indexs.join(""));
+                }
+                return false;
+            }
             fs.readFile(filePath, "utf-8", function (err, buffer) {
                 console.log("file: " + filePath);
                 if (err) {
                     console.log("error: " + filePath + "404 (Not Found)");
                 } else {
                     console.time("min");
-                    emit.indexs[i] = min(buffer.toString());
+                    if (config.compress) {
+                        emit.indexs[i] = min(buffer.toString());
+                    } else {
+                        emit.indexs[i] = buffer.toString();
+                    }
                     console.timeEnd("min");
                 }
-                console.log(emit.len);
+                console.log(i);
                 if (!--emit.len) {
                     emit.done(emit.indexs.join(""));
                 }
             });
-        })(filePath, i);
-    } else {
-        console.log(emit.len);
-        if (!--emit.len) {
-            emit.done(emit.indexs.join(""));
-        }
-    }
+        });
+    })(filePath, i);
     
     console.timeEnd("readFile");
 }
