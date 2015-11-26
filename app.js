@@ -17,11 +17,13 @@ var app = express();
 //app.set("view engine", "html");
 //app.set("views", "./views");
 
+// 默认通路测试接口
 app.get("/", function (req, res) {
     console.log("run get /");
     res.send("Hello world!");
 });
 
+// 请求合并接口
 app.get("/combine/*", function (req, res) {
     console.time("combine");
     console.log("run get /combine. request path: ", req.params["0"]);
@@ -55,6 +57,7 @@ app.get("/combine/*", function (req, res) {
     });
 });
 
+// 调用循环合并请求功能
 function concatFile(url, res) {
     loopFiles(url, {
         done: function (data) {
@@ -71,6 +74,7 @@ function concatFile(url, res) {
     });
 }
 
+// 创建缓存目录
 function mkdir(dirpath, mode) {
     var pathTemp;
     mode = mode || "0777"
@@ -85,6 +89,7 @@ function mkdir(dirpath, mode) {
     }
 }
 
+// 检查缓存文件是否存在
 function cacheCheck(url, callback) {
     var filePath = path.resolve(config.cache_path, md5(url) + ".json"), data;
     fs.exists(filePath, function (exists) {
@@ -110,6 +115,7 @@ function cacheCheck(url, callback) {
     });
 }
 
+// 写入缓存文件
 function cacheWrite(url, data) {
     mkdir(config.cache_path);
     fs.writeFile(path.resolve(config.cache_path, md5(url) + ".json"), JSON.stringify({
@@ -119,6 +125,7 @@ function cacheWrite(url, data) {
     }));
 }
 
+// 循环调用读取请求文件
 function loopFiles(url, emit) {
     var urls, indexs, i, len, filename;
     urls = url.split(",");
@@ -130,6 +137,7 @@ function loopFiles(url, emit) {
     }
 }
 
+// 读取请求文件，合并文件内容
 function readFile(filename, i, emit) {
     var filePath,
         ext = "";
@@ -177,6 +185,7 @@ function readFile(filename, i, emit) {
     console.timeEnd("readFile");
 }
 
+// 压缩文件内容
 function min(fileContent) {
     return uglify.minify(fileContent, {
         fromString: true,
