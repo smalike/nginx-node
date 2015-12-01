@@ -7,6 +7,7 @@
     "art-template": "^3.0.3",
     "express": "^4.13.3",
     "md5": "^2.0.0",
+    "pm2": "^0.15.10",
     "uglify-js": "^2.6.1"
   },
   "devDependencies": {},
